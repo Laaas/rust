@@ -257,7 +257,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for NonSnakeCase {
             self.check_snake_case(
                 cx,
                 "lifetime",
-                &ld.lifetime.name.name().as_str(),
+                &ld.lifetime.name.ident().as_str(),
                 Some(ld.lifetime.span)
             );
         }

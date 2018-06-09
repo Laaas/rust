@@ -910,7 +910,7 @@ impl<'hir> Map<'hir> {
             NodeTraitItem(ti) => ti.name,
             NodeVariant(v) => v.node.name,
             NodeField(f) => f.ident.name,
-            NodeLifetime(lt) => lt.name.name(),
+            NodeLifetime(lt) => lt.name.ident().name,
             NodeTyParam(tp) => tp.name,
             NodeBinding(&Pat { node: PatKind::Binding(_,_,l,_), .. }) => l.node,
             NodeStructCtor(_) => self.name(self.get_parent(id)),

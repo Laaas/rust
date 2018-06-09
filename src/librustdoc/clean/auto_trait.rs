@@ -254,7 +254,7 @@ impl<'a, 'tcx, 'rcx> AutoTraitFinder<'a, 'tcx, 'rcx> {
                     let name = if param.name == "" {
                         hir::LifetimeName::Static
                     } else {
-                        hir::LifetimeName::Name(param.name.as_symbol())
+                        hir::LifetimeName::Ident(ast::Ident::from_interned_str(param.name))
                     };
 
                     lifetimes.push(hir::Lifetime {

@@ -1691,22 +1691,20 @@ impl Clean<Lifetime> for hir::Lifetime {
                 _ => {}
             }
         }
-        Lifetime(self.name.name().to_string())
+        Lifetime(self.name.ident().to_string())
     }
 }
 
 impl Clean<Lifetime> for hir::LifetimeDef {
     fn clean(&self, _: &DocContext) -> Lifetime {
         if self.bounds.len() > 0 {
-            let mut s = format!("{}: {}",
-                                self.lifetime.name.name(),
-                                self.bounds[0].name.name());
+            let mut s = format!("{}: {}", self.lifetime, self.bounds[0]);
             for bound in self.bounds.iter().skip(1) {
-                s.push_str(&format!(" + {}", bound.name.name()));
+                s.push_str(&format!(" + {}", bound));
             }
             Lifetime(s)
         } else {
-            Lifetime(self.lifetime.name.name().to_string())
+            Lifetime(self.lifetime.to_string())
         }
     }
 }

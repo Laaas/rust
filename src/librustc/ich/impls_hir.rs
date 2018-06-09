@@ -147,7 +147,7 @@ impl_stable_hash_for!(enum hir::LifetimeName {
     Underscore,
     Fresh(index),
     Static,
-    Name(name)
+    Ident(ident)
 });
 
 impl_stable_hash_for!(struct hir::Label {

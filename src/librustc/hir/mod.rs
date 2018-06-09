@@ -229,18 +229,31 @@ pub enum LifetimeName {
     Static,
 
     /// Some user-given name like `'x`
-    Name(Name),
+    Ident(Ident),
 }
 
 impl LifetimeName {
-    pub fn name(&self) -> Name {
-        use self::LifetimeName::*;
+    pub fn ident(&self) -> Ident {
         match *self {
-            Implicit => keywords::Invalid.name(),
-            Fresh(_) | Underscore => keywords::UnderscoreLifetime.name(),
-            Static => keywords::StaticLifetime.name(),
-            Name(name) => name,
+            LifetimeName::Implicit => keywords::Invalid.ident(),
+            LifetimeName::Fresh(_) | LifetimeName::Underscore =>
+                keywords::UnderscoreLifetime.ident(),
+            LifetimeName::Static => keywords::StaticLifetime.ident(),
+            LifetimeName::Ident(ident) => ident,
         }
+    }
+
+    pub fn modern(&self) -> LifetimeName {
+        match *self {
+            LifetimeName::Ident(ident) => LifetimeName::Ident(ident.modern()),
+            lifetime_name => lifetime_name,
+        }
+    }
+}
+
+impl fmt::Display for Lifetime {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.name.ident().fmt(f)
     }
 }
 
@@ -255,16 +268,15 @@ impl fmt::Debug for Lifetime {
 
 impl Lifetime {
     pub fn is_elided(&self) -> bool {
-        use self::LifetimeName::*;
         match self.name {
-            Implicit | Underscore => true,
+            LifetimeName::Implicit | LifetimeName::Underscore => true,
 
             // It might seem surprising that `Fresh(_)` counts as
             // *not* elided -- but this is because, as far as the code
             // in the compiler is concerned -- `Fresh(_)` variants act
             // equivalently to "some fresh name". They correspond to
             // early-bound regions on an impl, in other words.
-            Fresh(_) | Static | Name(_) => false,
+            LifetimeName::Fresh(_) | LifetimeName::Static | LifetimeName::Ident(_) => false,
         }
     }
 

@@ -94,7 +94,7 @@ impl Region {
         let def_id = hir_map.local_def_id(def.lifetime.id);
         let origin = LifetimeDefOrigin::from_is_in_band(def.in_band);
         debug!("Region::early: index={} def_id={:?}", i, def_id);
-        (def.lifetime.name, Region::EarlyBound(i, def_id, origin))
+        (def.lifetime.name.modern(), Region::EarlyBound(i, def_id, origin))
     }
 
     fn late(hir_map: &Map, def: &hir::LifetimeDef) -> (hir::LifetimeName, Region) {
@@ -108,7 +108,7 @@ impl Region {
             def_id,
             origin,
         );
-        (def.lifetime.name, Region::LateBound(depth, def_id, origin))
+        (def.lifetime.name.modern(), Region::LateBound(depth, def_id, origin))
     }
 
     fn late_anon(index: &Cell<u32>) -> Region {
@@ -599,7 +599,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
                         // cc #48468
                         self.resolve_elided_lifetimes(slice::from_ref(lifetime), false)
                     }
-                    LifetimeName::Fresh(_) | LifetimeName::Static | LifetimeName::Name(_) => {
+                    LifetimeName::Fresh(_) | LifetimeName::Static | LifetimeName::Ident(_) => {
                         // If the user wrote an explicit name, use that.
                         self.visit_lifetime(lifetime);
                     }
@@ -1129,7 +1129,8 @@ fn extract_labels(ctxt: &mut LifetimeContext<'_, '_>, body: &hir::Body) {
                     ref lifetimes, s, ..
                 } => {
                     // FIXME (#24278): non-hygienic comparison
-                    if let Some(def) = lifetimes.get(&hir::LifetimeName::Name(label)) {
+                    let label_ident = ast::Ident::with_empty_ctxt(label);
+                    if let Some(def) = lifetimes.get(&hir::LifetimeName::Ident(label_ident)) {
                         let node_id = tcx.hir.as_local_node_id(def.id().unwrap()).unwrap();
 
                         signal_shadowing_problem(
@@ -1173,7 +1174,7 @@ fn compute_object_lifetime_defaults(
                                 .unwrap()
                                 .lifetime
                                 .name
-                                .name()
+                                .ident()
                                 .to_string(),
                             Set1::One(_) => bug!(),
                             Set1::Many => "Ambiguous".to_string(),
@@ -1201,7 +1202,7 @@ fn object_lifetime_defaults_for_item(
     fn add_bounds(set: &mut Set1<hir::LifetimeName>, bounds: &[hir::TyParamBound]) {
         for bound in bounds {
             if let hir::RegionTyParamBound(ref lifetime) = *bound {
-                set.insert(lifetime.name);
+                set.insert(lifetime.name.modern());
             }
         }
     }
@@ -1350,10 +1351,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                                 lint::builtin::SINGLE_USE_LIFETIMES,
                                 id,
                                 span,
-                                &format!(
-                                    "lifetime parameter `{}` only used once",
-                                    hir_lifetime.name.name()
-                                ),
+                                &format!("lifetime parameter `{}` only used once", hir_lifetime),
                             )
                             .emit();
                     }
@@ -1372,10 +1370,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                                 lint::builtin::UNUSED_LIFETIMES,
                                 id,
                                 span,
-                                &format!(
-                                    "lifetime parameter `{}` never used",
-                                    hir_lifetime.name.name()
-                                ),
+                                &format!("lifetime parameter `{}` never used", hir_lifetime),
                             )
                             .emit();
                     }
@@ -1515,7 +1510,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                 Scope::Binder {
                     ref lifetimes, s, ..
                 } => {
-                    if let Some(&def) = lifetimes.get(&lifetime_ref.name) {
+                    if let Some(&def) = lifetimes.get(&lifetime_ref.name.modern()) {
                         break Some(def.shifted(late_depth));
                     } else {
                         late_depth += 1;
@@ -1584,7 +1579,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                 lifetime_ref.span,
                 E0261,
                 "use of undeclared lifetime name `{}`",
-                lifetime_ref.name.name()
+                lifetime_ref
             ).span_label(lifetime_ref.span, "undeclared lifetime")
                 .emit();
         }
@@ -2154,23 +2149,22 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
             match lifetime_i.lifetime.name {
                 hir::LifetimeName::Static | hir::LifetimeName::Underscore => {
                     let lifetime = lifetime_i.lifetime;
-                    let name = lifetime.name.name();
                     let mut err = struct_span_err!(
                         self.tcx.sess,
                         lifetime.span,
                         E0262,
                         "invalid lifetime parameter name: `{}`",
-                        name
+                        lifetime
                     );
                     err.span_label(
                         lifetime.span,
-                        format!("{} is a reserved lifetime name", name),
+                        format!("{} is a reserved lifetime name", lifetime),
                     );
                     err.emit();
                 }
                 hir::LifetimeName::Fresh(_)
                 | hir::LifetimeName::Implicit
-                | hir::LifetimeName::Name(_) => {}
+                | hir::LifetimeName::Ident(_) => {}
             }
 
             // It is a hard error to shadow a lifetime within the same scope.
@@ -2181,7 +2175,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                         lifetime_j.lifetime.span,
                         E0263,
                         "lifetime name `{}` declared twice in the same scope",
-                        lifetime_j.lifetime.name.name()
+                        lifetime_j.lifetime
                     ).span_label(lifetime_j.lifetime.span, "declared twice")
                         .span_label(lifetime_i.lifetime.span, "previous declaration here")
                         .emit();
@@ -2205,25 +2199,22 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                     }
                     hir::LifetimeName::Static => {
                         self.insert_lifetime(bound, Region::Static);
+                        let lifetime = lifetime_i.lifetime;
                         self.tcx
                             .sess
                             .struct_span_warn(
-                                lifetime_i.lifetime.span.to(bound.span),
-                                &format!(
-                                    "unnecessary lifetime parameter `{}`",
-                                    lifetime_i.lifetime.name.name()
-                                ),
+                                lifetime.span.to(bound.span),
+                                &format!("unnecessary lifetime parameter `{}`", lifetime),
                             )
                             .help(&format!(
-                                "you can use the `'static` lifetime directly, in place \
-                                 of `{}`",
-                                lifetime_i.lifetime.name.name()
+                                "you can use the `'static` lifetime directly, in place of `{}`",
+                                lifetime
                             ))
                             .emit();
                     }
                     hir::LifetimeName::Fresh(_)
                     | hir::LifetimeName::Implicit
-                    | hir::LifetimeName::Name(_) => {
+                    | hir::LifetimeName::Ident(_) => {
                         self.resolve_lifetime_ref(bound);
                     }
                 }
@@ -2238,7 +2229,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
     ) {
         for &(label, label_span) in &self.labels_in_fn {
             // FIXME (#24278): non-hygienic comparison
-            if lifetime.name.name() == label {
+            if lifetime.name.ident().name == label {
                 signal_shadowing_problem(
                     self.tcx,
                     label,
@@ -2264,12 +2255,12 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
                 Scope::Binder {
                     ref lifetimes, s, ..
                 } => {
-                    if let Some(&def) = lifetimes.get(&lifetime.name) {
+                    if let Some(&def) = lifetimes.get(&lifetime.name.modern()) {
                         let node_id = self.tcx.hir.as_local_node_id(def.id().unwrap()).unwrap();
 
                         signal_shadowing_problem(
                             self.tcx,
-                            lifetime.name.name(),
+                            lifetime.name.ident().name,
                             original_lifetime(self.tcx.hir.span(node_id)),
                             shadower_lifetime(&lifetime),
                         );
@@ -2423,7 +2414,7 @@ fn insert_late_bound_lifetimes(
             hir::GenericParam::Lifetime(ref lifetime_def) => {
                 if !lifetime_def.bounds.is_empty() {
                     // `'a: 'b` means both `'a` and `'b` are referenced
-                    appears_in_where_clause.regions.insert(lifetime_def.lifetime.name);
+                    appears_in_where_clause.regions.insert(lifetime_def.lifetime.name.modern());
                 }
             }
             hir::GenericParam::Type(_) => {}
@@ -2440,7 +2431,7 @@ fn insert_late_bound_lifetimes(
     // - do not appear in the where-clauses
     // - are not implicitly captured by `impl Trait`
     for lifetime in generics.lifetimes() {
-        let name = lifetime.lifetime.name;
+        let name = lifetime.lifetime.name.modern();
 
         // appears in the where clauses? early-bound.
         if appears_in_where_clause.regions.contains(&name) {
@@ -2506,7 +2497,7 @@ fn insert_late_bound_lifetimes(
         }
 
         fn visit_lifetime(&mut self, lifetime_ref: &'v hir::Lifetime) {
-            self.regions.insert(lifetime_ref.name);
+            self.regions.insert(lifetime_ref.name.modern());
         }
     }
 
@@ -2520,7 +2511,7 @@ fn insert_late_bound_lifetimes(
         }
 
         fn visit_lifetime(&mut self, lifetime_ref: &'v hir::Lifetime) {
-            self.regions.insert(lifetime_ref.name);
+            self.regions.insert(lifetime_ref.name.modern());
         }
     }
 }

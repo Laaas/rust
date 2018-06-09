@@ -898,7 +898,7 @@ fn generics_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     let early_lifetimes = early_bound_lifetimes_from_generics(tcx, ast_generics);
     params.extend(early_lifetimes.enumerate().map(|(i, l)| {
         ty::GenericParamDef {
-            name: l.lifetime.name.name().as_interned_str(),
+            name: l.lifetime.name.ident().as_interned_str(),
             index: own_start + i as u32,
             def_id: tcx.hir.local_def_id(l.lifetime.id),
             pure_wrt_drop: l.pure_wrt_drop,
@@ -1432,7 +1432,7 @@ pub fn explicit_predicates_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         let region = tcx.mk_region(ty::ReEarlyBound(ty::EarlyBoundRegion {
             def_id: tcx.hir.local_def_id(param.lifetime.id),
             index,
-            name: param.lifetime.name.name().as_interned_str(),
+            name: param.lifetime.name.ident().as_interned_str(),
         }));
         index += 1;
 

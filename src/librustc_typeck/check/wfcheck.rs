@@ -632,7 +632,8 @@ fn check_variances_for_type_defn<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         }
 
         let (span, name) = match ast_generics.params[index] {
-            hir::GenericParam::Lifetime(ref ld) => (ld.lifetime.span, ld.lifetime.name.name()),
+            hir::GenericParam::Lifetime(ref ld) =>
+                (ld.lifetime.span, ld.lifetime.name.ident().name),
             hir::GenericParam::Type(ref tp) => (tp.span, tp.name),
         };
         report_bivariance(tcx, span, name);
