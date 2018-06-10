@@ -1715,7 +1715,7 @@ impl<'a> State<'a> {
 
             for binding in parameters.bindings.iter() {
                 start_or_comma(self)?;
-                self.print_name(binding.name)?;
+                self.print_ident(binding.ident)?;
                 self.s.space()?;
                 self.word_space("=")?;
                 self.print_type(&binding.ty)?;
