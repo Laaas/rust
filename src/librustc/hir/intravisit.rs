@@ -58,7 +58,7 @@ pub enum FnKind<'a> {
     ItemFn(Name, &'a Generics, Unsafety, Constness, Abi, &'a Visibility, &'a [Attribute]),
 
     /// fn foo(&self)
-    Method(Name, &'a MethodSig, Option<&'a Visibility>, &'a [Attribute]),
+    Method(Ident, &'a MethodSig, Option<&'a Visibility>, &'a [Attribute]),
 
     /// |x, y| {}
     Closure(&'a [Attribute]),
@@ -827,7 +827,7 @@ pub fn walk_fn<'v, V: Visitor<'v>>(visitor: &mut V,
 }
 
 pub fn walk_trait_item<'v, V: Visitor<'v>>(visitor: &mut V, trait_item: &'v TraitItem) {
-    visitor.visit_name(trait_item.span, trait_item.name);
+    visitor.visit_ident(trait_item.ident);
     walk_list!(visitor, visit_attribute, &trait_item.attrs);
     visitor.visit_generics(&trait_item.generics);
     match trait_item.node {
@@ -844,7 +844,7 @@ pub fn walk_trait_item<'v, V: Visitor<'v>>(visitor: &mut V, trait_item: &'v Trai
             }
         }
         TraitItemKind::Method(ref sig, TraitMethod::Provided(body_id)) => {
-            visitor.visit_fn(FnKind::Method(trait_item.name,
+            visitor.visit_fn(FnKind::Method(trait_item.ident,
                                             sig,
                                             None,
                                             &trait_item.attrs),
@@ -863,9 +863,9 @@ pub fn walk_trait_item<'v, V: Visitor<'v>>(visitor: &mut V, trait_item: &'v Trai
 
 pub fn walk_trait_item_ref<'v, V: Visitor<'v>>(visitor: &mut V, trait_item_ref: &'v TraitItemRef) {
     // NB: Deliberately force a compilation error if/when new fields are added.
-    let TraitItemRef { id, name, ref kind, span, ref defaultness } = *trait_item_ref;
+    let TraitItemRef { id, ident, ref kind, span: _, ref defaultness } = *trait_item_ref;
     visitor.visit_nested_trait_item(id);
-    visitor.visit_name(span, name);
+    visitor.visit_ident(ident);
     visitor.visit_associated_item_kind(kind);
     visitor.visit_defaultness(defaultness);
 }
@@ -875,16 +875,16 @@ pub fn walk_impl_item<'v, V: Visitor<'v>>(visitor: &mut V, impl_item: &'v ImplIt
     let ImplItem {
         id: _,
         hir_id: _,
-        name,
+        ident,
         ref vis,
         ref defaultness,
         ref attrs,
         ref generics,
         ref node,
-        span
+        span: _,
     } = *impl_item;
 
-    visitor.visit_name(span, name);
+    visitor.visit_ident(ident);
     visitor.visit_vis(vis);
     visitor.visit_defaultness(defaultness);
     walk_list!(visitor, visit_attribute, attrs);
@@ -896,7 +896,7 @@ pub fn walk_impl_item<'v, V: Visitor<'v>>(visitor: &mut V, impl_item: &'v ImplIt
             visitor.visit_nested_body(body);
         }
         ImplItemKind::Method(ref sig, body_id) => {
-            visitor.visit_fn(FnKind::Method(impl_item.name,
+            visitor.visit_fn(FnKind::Method(impl_item.ident,
                                             sig,
                                             Some(&impl_item.vis),
                                             &impl_item.attrs),
@@ -914,9 +914,9 @@ pub fn walk_impl_item<'v, V: Visitor<'v>>(visitor: &mut V, impl_item: &'v ImplIt
 
 pub fn walk_impl_item_ref<'v, V: Visitor<'v>>(visitor: &mut V, impl_item_ref: &'v ImplItemRef) {
     // NB: Deliberately force a compilation error if/when new fields are added.
-    let ImplItemRef { id, name, ref kind, span, ref vis, ref defaultness } = *impl_item_ref;
+    let ImplItemRef { id, ident, ref kind, span: _, ref vis, ref defaultness } = *impl_item_ref;
     visitor.visit_nested_impl_item(id);
-    visitor.visit_name(span, name);
+    visitor.visit_ident(ident);
     visitor.visit_associated_item_kind(kind);
     visitor.visit_vis(vis);
     visitor.visit_defaultness(defaultness);

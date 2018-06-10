@@ -51,7 +51,7 @@ use middle::cstore::CrateStore;
 use rustc_data_structures::indexed_vec::IndexVec;
 use session::Session;
 use util::common::FN_OUTPUT_NAME;
-use util::nodemap::{DefIdMap, FxHashMap, NodeMap};
+use util::nodemap::{DefIdMap, NodeMap};
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
@@ -83,7 +83,6 @@ pub struct LoweringContext<'a> {
     cstore: &'a CrateStore,
 
     resolver: &'a mut Resolver,
-    name_map: FxHashMap<Ident, Name>,
 
     /// The items being lowered are collected here.
     items: BTreeMap<NodeId, hir::Item>,
@@ -202,7 +201,6 @@ pub fn lower_crate(
         sess,
         cstore,
         resolver,
-        name_map: FxHashMap(),
         items: BTreeMap::new(),
         trait_items: BTreeMap::new(),
         impl_items: BTreeMap::new(),
@@ -899,16 +897,6 @@ impl<'a> LoweringContext<'a> {
         } else {
             self.cstore.def_key(id)
         }
-    }
-
-    fn lower_ident(&mut self, ident: Ident) -> Name {
-        let ident = ident.modern();
-        if ident.span.ctxt() == SyntaxContext::empty() {
-            return ident.name;
-        }
-        *self.name_map
-            .entry(ident)
-            .or_insert_with(|| Symbol::from_ident(ident))
     }
 
     fn lower_label(&mut self, label: Option<Label>) -> Option<hir::Label> {
@@ -2530,7 +2518,7 @@ impl<'a> LoweringContext<'a> {
         hir::TraitItem {
             id: node_id,
             hir_id,
-            name: self.lower_ident(i.ident),
+            ident: i.ident,
             attrs: self.lower_attrs(&i.attrs),
             generics,
             node,
@@ -2556,7 +2544,7 @@ impl<'a> LoweringContext<'a> {
         };
         hir::TraitItemRef {
             id: hir::TraitItemId { node_id: i.id },
-            name: self.lower_ident(i.ident),
+            ident: i.ident,
             span: i.span,
             defaultness: self.lower_defaultness(Defaultness::Default, has_default),
             kind,
@@ -2611,7 +2599,7 @@ impl<'a> LoweringContext<'a> {
         hir::ImplItem {
             id: node_id,
             hir_id,
-            name: self.lower_ident(i.ident),
+            ident: i.ident,
             attrs: self.lower_attrs(&i.attrs),
             generics,
             vis: self.lower_visibility(&i.vis, None),
@@ -2626,7 +2614,7 @@ impl<'a> LoweringContext<'a> {
     fn lower_impl_item_ref(&mut self, i: &ImplItem) -> hir::ImplItemRef {
         hir::ImplItemRef {
             id: hir::ImplItemId { node_id: i.id },
-            name: self.lower_ident(i.ident),
+            ident: i.ident,
             span: i.span,
             vis: self.lower_visibility(&i.vis, Some(i.id)),
             defaultness: self.lower_defaultness(i.defaultness, true /* [1] */),
