@@ -3004,10 +3004,10 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                 Ok(method)
             }
             Err(error) => {
-                if segment.name != keywords::Invalid.name() {
+                if segment.ident.name != keywords::Invalid.name() {
                     self.report_method_error(span,
                                              rcvr_t,
-                                             segment.name,
+                                             segment.ident,
                                              Some(rcvr),
                                              error,
                                              Some(args));
@@ -3837,7 +3837,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                       // ... except when we try to 'break rust;'.
                       // ICE this expression in particular (see #43162).
                       if let hir::ExprPath(hir::QPath::Resolved(_, ref path)) = e.node {
-                          if path.segments.len() == 1 && path.segments[0].name == "rust" {
+                          if path.segments.len() == 1 && path.segments[0].ident.name == "rust" {
                               fatally_break_rust(self.tcx.sess);
                           }
                       }
@@ -4245,7 +4245,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             // errors with default match binding modes. See #44614.
             return (*cached_def, Some(ty), slice::from_ref(&**item_segment))
         }
-        let item_name = item_segment.name;
+        let item_name = item_segment.ident;
         let def = match self.resolve_ufcs(span, item_name, ty, node_id) {
             Ok(def) => def,
             Err(error) => {
@@ -4253,7 +4253,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                     method::MethodError::PrivateMatch(def, _) => def,
                     _ => Def::Err,
                 };
-                if item_name != keywords::Invalid.name() {
+                if item_name.name != keywords::Invalid.name() {
                     self.report_method_error(span, ty, item_name, None, error, None);
                 }
                 def
