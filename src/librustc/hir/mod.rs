@@ -178,13 +178,12 @@ pub const DUMMY_ITEM_LOCAL_ID: ItemLocalId = ItemLocalId(!0);
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
 pub struct Label {
-    pub name: Name,
-    pub span: Span,
+    pub ident: Ident,
 }
 
 impl fmt::Debug for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "label({:?})", self.name)
+        write!(f, "label({:?})", self.ident)
     }
 }
 
@@ -457,11 +456,10 @@ pub type TyParamBounds = HirVec<TyParamBound>;
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct TyParam {
-    pub name: Name,
+    pub ident: Ident,
     pub id: NodeId,
     pub bounds: TyParamBounds,
     pub default: Option<P<Ty>>,
-    pub span: Span,
     pub pure_wrt_drop: bool,
     pub synthetic: Option<SyntheticTyParamKind>,
     pub attrs: HirVec<Attribute>,
@@ -923,7 +921,7 @@ pub enum PatKind {
     /// The `NodeId` is the canonical ID for the variable being bound,
     /// e.g. in `Ok(x) | Err(x)`, both `x` use the same canonical ID,
     /// which is the pattern ID of the first `x`.
-    Binding(BindingAnnotation, NodeId, Spanned<Name>, Option<P<Pat>>),
+    Binding(BindingAnnotation, NodeId, Ident, Option<P<Pat>>),
 
     /// A struct or struct variant pattern, e.g. `Variant {x, y, ..}`.
     /// The `bool` is `true` in the presence of a `..`.
@@ -1603,7 +1601,7 @@ pub struct TraitItem {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub enum TraitMethod {
     /// No default body in the trait, just a signature.
-    Required(HirVec<Spanned<Name>>),
+    Required(HirVec<Ident>),
 
     /// Both signature and body are provided in the trait.
     Provided(BodyId),
@@ -1698,7 +1696,7 @@ pub struct BareFnTy {
     pub abi: Abi,
     pub generic_params: HirVec<GenericParam>,
     pub decl: P<FnDecl>,
-    pub arg_names: HirVec<Spanned<Name>>,
+    pub arg_names: HirVec<Ident>,
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
@@ -2220,7 +2218,7 @@ pub struct ForeignItem {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub enum ForeignItem_ {
     /// A foreign function
-    ForeignItemFn(P<FnDecl>, HirVec<Spanned<Name>>, Generics),
+    ForeignItemFn(P<FnDecl>, HirVec<Ident>, Generics),
     /// A foreign static item (`static ext: u8`), with optional mutability
     /// (the boolean is true when mutable)
     ForeignItemStatic(P<Ty>, bool),

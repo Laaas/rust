@@ -255,7 +255,7 @@ struct LifetimeContext<'a, 'tcx: 'a> {
     is_in_fn_syntax: bool,
 
     /// List of labels in the function/method currently under analysis.
-    labels_in_fn: Vec<(ast::Name, Span)>,
+    labels_in_fn: Vec<ast::Ident>,
 
     /// Cache for cross-crate per-definition object lifetime defaults.
     xcrate_object_lifetime_defaults: DefIdMap<Vec<ObjectLifetimeDefault>>,
@@ -1061,7 +1061,7 @@ fn extract_labels(ctxt: &mut LifetimeContext<'_, '_>, body: &hir::Body) {
     struct GatherLabels<'a, 'tcx: 'a> {
         tcx: TyCtxt<'a, 'tcx, 'tcx>,
         scope: ScopeRef<'a>,
-        labels_in_fn: &'a mut Vec<(ast::Name, Span)>,
+        labels_in_fn: &'a mut Vec<ast::Ident>,
     }
 
     let mut gather = GatherLabels {
@@ -1077,32 +1077,31 @@ fn extract_labels(ctxt: &mut LifetimeContext<'_, '_>, body: &hir::Body) {
         }
 
         fn visit_expr(&mut self, ex: &hir::Expr) {
-            if let Some((label, label_span)) = expression_label(ex) {
-                for &(prior, prior_span) in &self.labels_in_fn[..] {
+            if let Some(label) = expression_label(ex) {
+                for prior_label in &self.labels_in_fn[..] {
                     // FIXME (#24278): non-hygienic comparison
-                    if label == prior {
+                    if label.name == prior_label.name {
                         signal_shadowing_problem(
                             self.tcx,
-                            label,
-                            original_label(prior_span),
-                            shadower_label(label_span),
+                            label.name,
+                            original_label(prior_label.span),
+                            shadower_label(label.span),
                         );
                     }
                 }
 
-                check_if_label_shadows_lifetime(self.tcx, self.scope, label, label_span);
+                check_if_label_shadows_lifetime(self.tcx, self.scope, label);
 
-                self.labels_in_fn.push((label, label_span));
+                self.labels_in_fn.push(label);
             }
             intravisit::walk_expr(self, ex)
         }
     }
 
-    fn expression_label(ex: &hir::Expr) -> Option<(ast::Name, Span)> {
+    fn expression_label(ex: &hir::Expr) -> Option<ast::Ident> {
         match ex.node {
-            hir::ExprWhile(.., Some(label)) | hir::ExprLoop(_, Some(label), _) => {
-                Some((label.name, label.span))
-            }
+            hir::ExprWhile(.., Some(label)) |
+            hir::ExprLoop(_, Some(label), _) => Some(label.ident),
             _ => None,
         }
     }
@@ -1110,8 +1109,7 @@ fn extract_labels(ctxt: &mut LifetimeContext<'_, '_>, body: &hir::Body) {
     fn check_if_label_shadows_lifetime(
         tcx: TyCtxt<'_, '_, '_>,
         mut scope: ScopeRef<'_>,
-        label: ast::Name,
-        label_span: Span,
+        label: ast::Ident,
     ) {
         loop {
             match *scope {
@@ -1129,15 +1127,14 @@ fn extract_labels(ctxt: &mut LifetimeContext<'_, '_>, body: &hir::Body) {
                     ref lifetimes, s, ..
                 } => {
                     // FIXME (#24278): non-hygienic comparison
-                    let label_ident = ast::Ident::with_empty_ctxt(label);
-                    if let Some(def) = lifetimes.get(&hir::LifetimeName::Ident(label_ident)) {
+                    if let Some(def) = lifetimes.get(&hir::LifetimeName::Ident(label.modern())) {
                         let node_id = tcx.hir.as_local_node_id(def.id().unwrap()).unwrap();
 
                         signal_shadowing_problem(
                             tcx,
-                            label,
+                            label.name,
                             original_lifetime(tcx.hir.span(node_id)),
-                            shadower_label(label_span),
+                            shadower_label(label.span),
                         );
                         return;
                     }
@@ -2227,13 +2224,13 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         mut old_scope: ScopeRef,
         lifetime: &'tcx hir::Lifetime,
     ) {
-        for &(label, label_span) in &self.labels_in_fn {
+        for label in &self.labels_in_fn {
             // FIXME (#24278): non-hygienic comparison
-            if lifetime.name.ident().name == label {
+            if lifetime.name.ident().name == label.name {
                 signal_shadowing_problem(
                     self.tcx,
-                    label,
-                    original_label(label_span),
+                    label.name,
+                    original_label(label.span),
                     shadower_lifetime(&lifetime),
                 );
                 return;

@@ -570,7 +570,7 @@ impl<'hir> Map<'hir> {
             NodeItem(&Item { node: ItemTrait(..), .. }) => {
                 keywords::SelfType.name()
             }
-            NodeTyParam(tp) => tp.name,
+            NodeTyParam(tp) => tp.ident.name,
             _ => {
                 bug!("ty_param_name: {} not a type parameter",
                     self.node_to_string(id))
@@ -911,8 +911,8 @@ impl<'hir> Map<'hir> {
             NodeVariant(v) => v.node.name,
             NodeField(f) => f.ident.name,
             NodeLifetime(lt) => lt.name.ident().name,
-            NodeTyParam(tp) => tp.name,
-            NodeBinding(&Pat { node: PatKind::Binding(_,_,l,_), .. }) => l.node,
+            NodeTyParam(tp) => tp.ident.name,
+            NodeBinding(&Pat { node: PatKind::Binding(_,_,i,_), .. }) => i.name,
             NodeStructCtor(_) => self.name(self.get_parent(id)),
             _ => bug!("no name for {}", self.node_to_string(id))
         }
@@ -978,7 +978,7 @@ impl<'hir> Map<'hir> {
             Some(EntryBlock(_, _, block)) => block.span,
             Some(EntryStructCtor(_, _, _)) => self.expect_item(self.get_parent(id)).span,
             Some(EntryLifetime(_, _, lifetime)) => lifetime.span,
-            Some(EntryTyParam(_, _, ty_param)) => ty_param.span,
+            Some(EntryTyParam(_, _, ty_param)) => ty_param.ident.span,
             Some(EntryVisibility(_, _, &Visibility::Restricted { ref path, .. })) => path.span,
             Some(EntryVisibility(_, _, v)) => bug!("unexpected Visibility {:?}", v),
             Some(EntryLocal(_, _, local)) => local.span,

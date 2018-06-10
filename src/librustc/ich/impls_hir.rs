@@ -151,8 +151,7 @@ impl_stable_hash_for!(enum hir::LifetimeName {
 });
 
 impl_stable_hash_for!(struct hir::Label {
-    span,
-    name
+    ident
 });
 
 impl_stable_hash_for!(struct hir::Lifetime {
@@ -198,11 +197,10 @@ impl_stable_hash_for!(enum hir::TraitBoundModifier {
 });
 
 impl_stable_hash_for!(struct hir::TyParam {
-    name,
+    ident,
     id,
     bounds,
     default,
-    span,
     pure_wrt_drop,
     synthetic,
     attrs

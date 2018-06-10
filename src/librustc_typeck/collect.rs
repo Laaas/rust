@@ -912,8 +912,8 @@ fn generics_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     // Now create the real type parameters.
     let type_start = own_start - has_self as u32 + params.len() as u32;
     params.extend(ast_generics.ty_params().enumerate().map(|(i, p)| {
-        if p.name == keywords::SelfType.name() {
-            span_bug!(p.span, "`Self` should not be the name of a regular parameter");
+        if p.ident.name == keywords::SelfType.name() {
+            span_bug!(p.ident.span, "`Self` should not be the name of a regular parameter");
         }
 
         if !allow_defaults && p.default.is_some() {
@@ -921,7 +921,7 @@ fn generics_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                 tcx.lint_node(
                     lint::builtin::INVALID_TYPE_PARAM_DEFAULT,
                     p.id,
-                    p.span,
+                    p.ident.span,
                     &format!("defaults for type parameters are only allowed in `struct`, \
                               `enum`, `type`, or `trait` definitions."));
             }
@@ -929,7 +929,7 @@ fn generics_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
 
         ty::GenericParamDef {
             index: type_start + i as u32,
-            name: p.name.as_interned_str(),
+            name: p.ident.as_interned_str(),
             def_id: tcx.hir.local_def_id(p.id),
             pure_wrt_drop: p.pure_wrt_drop,
             kind: ty::GenericParamDefKind::Type {
@@ -1446,14 +1446,14 @@ pub fn explicit_predicates_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     // Collect the predicates that were written inline by the user on each
     // type parameter (e.g., `<T:Foo>`).
     for param in ast_generics.ty_params() {
-        let param_ty = ty::ParamTy::new(index, param.name.as_interned_str()).to_ty(tcx);
+        let param_ty = ty::ParamTy::new(index, param.ident.as_interned_str()).to_ty(tcx);
         index += 1;
 
         let bounds = compute_bounds(&icx,
                                     param_ty,
                                     &param.bounds,
                                     SizedByDefault::Yes,
-                                    param.span);
+                                    param.ident.span);
         predicates.extend(bounds.predicates(tcx, param_ty));
     }
 

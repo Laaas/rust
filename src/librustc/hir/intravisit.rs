@@ -421,7 +421,7 @@ pub fn walk_ident<'v, V: Visitor<'v>>(visitor: &mut V, ident: Ident) {
 }
 
 pub fn walk_label<'v, V: Visitor<'v>>(visitor: &mut V, label: &'v Label) {
-    visitor.visit_name(label.span, label.name);
+    visitor.visit_ident(label.ident);
 }
 
 pub fn walk_lifetime<'v, V: Visitor<'v>>(visitor: &mut V, lifetime: &'v Lifetime) {
@@ -680,9 +680,9 @@ pub fn walk_pat<'v, V: Visitor<'v>>(visitor: &mut V, pattern: &'v Pat) {
         PatKind::Ref(ref subpattern, _) => {
             visitor.visit_pat(subpattern)
         }
-        PatKind::Binding(_, canonical_id, ref pth1, ref optional_subpattern) => {
+        PatKind::Binding(_, canonical_id, ident, ref optional_subpattern) => {
             visitor.visit_def_mention(Def::Local(canonical_id));
-            visitor.visit_name(pth1.span, pth1.node);
+            visitor.visit_ident(ident);
             walk_list!(visitor, visit_pat, optional_subpattern);
         }
         PatKind::Lit(ref expression) => visitor.visit_expr(expression),
@@ -705,11 +705,11 @@ pub fn walk_foreign_item<'v, V: Visitor<'v>>(visitor: &mut V, foreign_item: &'v 
     visitor.visit_name(foreign_item.span, foreign_item.name);
 
     match foreign_item.node {
-        ForeignItemFn(ref function_declaration, ref names, ref generics) => {
+        ForeignItemFn(ref function_declaration, ref param_names, ref generics) => {
             visitor.visit_generics(generics);
             visitor.visit_fn_decl(function_declaration);
-            for name in names {
-                visitor.visit_name(name.span, name.node);
+            for &param_name in param_names {
+                visitor.visit_ident(param_name);
             }
         }
         ForeignItemStatic(ref typ, _) => visitor.visit_ty(typ),
@@ -747,7 +747,7 @@ pub fn walk_generic_param<'v, V: Visitor<'v>>(visitor: &mut V, param: &'v Generi
         }
         GenericParam::Type(ref ty_param) => {
             visitor.visit_id(ty_param.id);
-            visitor.visit_name(ty_param.span, ty_param.name);
+            visitor.visit_ident(ty_param.ident);
             walk_list!(visitor, visit_ty_param_bound, &ty_param.bounds);
             walk_list!(visitor, visit_ty, &ty_param.default);
             walk_list!(visitor, visit_attribute, ty_param.attrs.iter());
@@ -836,11 +836,11 @@ pub fn walk_trait_item<'v, V: Visitor<'v>>(visitor: &mut V, trait_item: &'v Trai
             visitor.visit_ty(ty);
             walk_list!(visitor, visit_nested_body, default);
         }
-        TraitItemKind::Method(ref sig, TraitMethod::Required(ref names)) => {
+        TraitItemKind::Method(ref sig, TraitMethod::Required(ref param_names)) => {
             visitor.visit_id(trait_item.id);
             visitor.visit_fn_decl(&sig.decl);
-            for name in names {
-                visitor.visit_name(name.span, name.node);
+            for &param_name in param_names {
+                visitor.visit_ident(param_name);
             }
         }
         TraitItemKind::Method(ref sig, TraitMethod::Provided(body_id)) => {

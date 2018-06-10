@@ -12,7 +12,7 @@ pub use self::AnnNode::*;
 
 use rustc_target::spec::abi::Abi;
 use syntax::ast;
-use syntax::codemap::{CodeMap, Spanned};
+use syntax::codemap::CodeMap;
 use syntax::parse::ParseSess;
 use syntax::parse::lexer::comments;
 use syntax::print::pp::{self, Breaks};
@@ -894,7 +894,7 @@ impl<'a> State<'a> {
                             m: &hir::MethodSig,
                             generics: &hir::Generics,
                             vis: &hir::Visibility,
-                            arg_names: &[Spanned<ast::Name>],
+                            arg_names: &[ast::Ident],
                             body_id: Option<hir::BodyId>)
                             -> io::Result<()> {
         self.print_fn(&m.decl,
@@ -1347,7 +1347,7 @@ impl<'a> State<'a> {
             }
             hir::ExprWhile(ref test, ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 self.head("while")?;
@@ -1357,7 +1357,7 @@ impl<'a> State<'a> {
             }
             hir::ExprLoop(ref blk, opt_label, _) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 self.head("loop")?;
@@ -1393,7 +1393,7 @@ impl<'a> State<'a> {
             }
             hir::ExprBlock(ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 // containing cbox, will be closed by print-block at }
@@ -1435,7 +1435,7 @@ impl<'a> State<'a> {
                 self.s.word("break")?;
                 self.s.space()?;
                 if let Some(label) = destination.label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.s.space()?;
                 }
                 if let Some(ref expr) = *opt_expr {
@@ -1447,7 +1447,7 @@ impl<'a> State<'a> {
                 self.s.word("continue")?;
                 self.s.space()?;
                 if let Some(label) = destination.label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.s.space()?
                 }
             }
@@ -1737,7 +1737,7 @@ impl<'a> State<'a> {
         // is that it doesn't matter
         match pat.node {
             PatKind::Wild => self.s.word("_")?,
-            PatKind::Binding(binding_mode, _, ref path1, ref sub) => {
+            PatKind::Binding(binding_mode, _, ident, ref sub) => {
                 match binding_mode {
                     hir::BindingAnnotation::Ref => {
                         self.word_nbsp("ref")?;
@@ -1752,7 +1752,7 @@ impl<'a> State<'a> {
                         self.word_nbsp("mut")?;
                     }
                 }
-                self.print_name(path1.node)?;
+                self.print_ident(ident)?;
                 if let Some(ref p) = *sub {
                     self.s.word("@")?;
                     self.print_pat(&p)?;
@@ -1917,7 +1917,7 @@ impl<'a> State<'a> {
         match arm.body.node {
             hir::ExprBlock(ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 // the block will close the pattern's ibox
@@ -1945,7 +1945,7 @@ impl<'a> State<'a> {
                     name: Option<ast::Name>,
                     generics: &hir::Generics,
                     vis: &hir::Visibility,
-                    arg_names: &[Spanned<ast::Name>],
+                    arg_names: &[ast::Ident],
                     body_id: Option<hir::BodyId>)
                     -> io::Result<()> {
         self.print_fn_header_info(unsafety, constness, abi, vis)?;
@@ -1962,8 +1962,8 @@ impl<'a> State<'a> {
         assert!(arg_names.is_empty() || body_id.is_none());
         self.commasep(Inconsistent, &decl.inputs, |s, ty| {
             s.ibox(indent_unit)?;
-            if let Some(name) = arg_names.get(i) {
-                s.s.word(&name.node.as_str())?;
+            if let Some(arg_name) = arg_names.get(i) {
+                s.s.word(&arg_name.as_str())?;
                 s.s.word(":")?;
                 s.s.space()?;
             } else if let Some(body_id) = body_id {
@@ -2086,7 +2086,7 @@ impl<'a> State<'a> {
     }
 
     pub fn print_ty_param(&mut self, param: &hir::TyParam) -> io::Result<()> {
-        self.print_name(param.name)?;
+        self.print_ident(param.ident)?;
         self.print_bounds(":", &param.bounds)?;
         match param.default {
             Some(ref default) => {
@@ -2188,7 +2188,7 @@ impl<'a> State<'a> {
                        decl: &hir::FnDecl,
                        name: Option<ast::Name>,
                        generic_params: &[hir::GenericParam],
-                       arg_names: &[Spanned<ast::Name>])
+                       arg_names: &[ast::Ident])
                        -> io::Result<()> {
         self.ibox(indent_unit)?;
         if !generic_params.is_empty() {
