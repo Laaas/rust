@@ -816,7 +816,7 @@ impl<'a, 'tcx> CrateMetadata {
         };
 
         ty::AssociatedItem {
-            name: name.as_symbol(),
+            ident: Ident::from_interned_str(name),
             kind,
             vis: item.visibility.decode(self),
             defaultness: container.defaultness(),

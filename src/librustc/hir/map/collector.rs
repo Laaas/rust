@@ -502,7 +502,7 @@ impl<'a, 'hir> Visitor<'hir> for NodeCollector<'a, 'hir> {
         // map the actual nodes, not the duplicate ones in the *Ref.
         let TraitItemRef {
             id,
-            name: _,
+            ident: _,
             kind: _,
             span: _,
             defaultness: _,
@@ -516,7 +516,7 @@ impl<'a, 'hir> Visitor<'hir> for NodeCollector<'a, 'hir> {
         // map the actual nodes, not the duplicate ones in the *Ref.
         let ImplItemRef {
             id,
-            name: _,
+            ident: _,
             kind: _,
             span: _,
             vis: _,

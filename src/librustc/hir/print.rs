@@ -12,7 +12,7 @@ pub use self::AnnNode::*;
 
 use rustc_target::spec::abi::Abi;
 use syntax::ast;
-use syntax::codemap::{CodeMap, Spanned};
+use syntax::codemap::CodeMap;
 use syntax::parse::ParseSess;
 use syntax::parse::lexer::comments;
 use syntax::print::pp::{self, Breaks};
@@ -481,14 +481,14 @@ impl<'a> State<'a> {
     }
 
     fn print_associated_const(&mut self,
-                              name: ast::Name,
+                              ident: ast::Ident,
                               ty: &hir::Ty,
                               default: Option<hir::BodyId>,
                               vis: &hir::Visibility)
                               -> io::Result<()> {
         self.s.word(&visibility_qualified(vis, ""))?;
         self.word_space("const")?;
-        self.print_name(name)?;
+        self.print_ident(ident)?;
         self.word_space(":")?;
         self.print_type(ty)?;
         if let Some(expr) = default {
@@ -500,12 +500,12 @@ impl<'a> State<'a> {
     }
 
     fn print_associated_type(&mut self,
-                             name: ast::Name,
+                             ident: ast::Ident,
                              bounds: Option<&hir::TyParamBounds>,
                              ty: Option<&hir::Ty>)
                              -> io::Result<()> {
         self.word_space("type")?;
-        self.print_name(name)?;
+        self.print_ident(ident)?;
         if let Some(bounds) = bounds {
             self.print_bounds(":", bounds)?;
         }
@@ -543,7 +543,7 @@ impl<'a> State<'a> {
 
                 match kind {
                     hir::UseKind::Single => {
-                        if path.segments.last().unwrap().name != item.name {
+                        if path.segments.last().unwrap().ident.name != item.name {
                             self.s.space()?;
                             self.word_space("as")?;
                             self.print_name(item.name)?;
@@ -806,7 +806,8 @@ impl<'a> State<'a> {
             hir::Visibility::Crate(ast::CrateSugar::PubCrate) => self.word_nbsp("pub(crate)")?,
             hir::Visibility::Restricted { ref path, .. } => {
                 self.s.word("pub(")?;
-                if path.segments.len() == 1 && path.segments[0].name == keywords::Super.name() {
+                if path.segments.len() == 1 &&
+                   path.segments[0].ident.name == keywords::Super.name() {
                     // Special case: `super` can print like `pub(super)`.
                     self.s.word("super")?;
                 } else {
@@ -889,18 +890,18 @@ impl<'a> State<'a> {
         Ok(())
     }
     pub fn print_method_sig(&mut self,
-                            name: ast::Name,
+                            ident: ast::Ident,
                             m: &hir::MethodSig,
                             generics: &hir::Generics,
                             vis: &hir::Visibility,
-                            arg_names: &[Spanned<ast::Name>],
+                            arg_names: &[ast::Ident],
                             body_id: Option<hir::BodyId>)
                             -> io::Result<()> {
         self.print_fn(&m.decl,
                       m.unsafety,
                       m.constness,
                       m.abi,
-                      Some(name),
+                      Some(ident.name),
                       generics,
                       vis,
                       arg_names,
@@ -914,16 +915,16 @@ impl<'a> State<'a> {
         self.print_outer_attributes(&ti.attrs)?;
         match ti.node {
             hir::TraitItemKind::Const(ref ty, default) => {
-                self.print_associated_const(ti.name, &ty, default, &hir::Inherited)?;
+                self.print_associated_const(ti.ident, &ty, default, &hir::Inherited)?;
             }
             hir::TraitItemKind::Method(ref sig, hir::TraitMethod::Required(ref arg_names)) => {
-                self.print_method_sig(ti.name, sig, &ti.generics, &hir::Inherited, arg_names,
+                self.print_method_sig(ti.ident, sig, &ti.generics, &hir::Inherited, arg_names,
                     None)?;
                 self.s.word(";")?;
             }
             hir::TraitItemKind::Method(ref sig, hir::TraitMethod::Provided(body)) => {
                 self.head("")?;
-                self.print_method_sig(ti.name, sig, &ti.generics, &hir::Inherited, &[],
+                self.print_method_sig(ti.ident, sig, &ti.generics, &hir::Inherited, &[],
                     Some(body))?;
                 self.nbsp()?;
                 self.end()?; // need to close a box
@@ -931,7 +932,7 @@ impl<'a> State<'a> {
                 self.ann.nested(self, Nested::Body(body))?;
             }
             hir::TraitItemKind::Type(ref bounds, ref default) => {
-                self.print_associated_type(ti.name,
+                self.print_associated_type(ti.ident,
                                            Some(bounds),
                                            default.as_ref().map(|ty| &**ty))?;
             }
@@ -948,18 +949,18 @@ impl<'a> State<'a> {
 
         match ii.node {
             hir::ImplItemKind::Const(ref ty, expr) => {
-                self.print_associated_const(ii.name, &ty, Some(expr), &ii.vis)?;
+                self.print_associated_const(ii.ident, &ty, Some(expr), &ii.vis)?;
             }
             hir::ImplItemKind::Method(ref sig, body) => {
                 self.head("")?;
-                self.print_method_sig(ii.name, sig, &ii.generics, &ii.vis, &[], Some(body))?;
+                self.print_method_sig(ii.ident, sig, &ii.generics, &ii.vis, &[], Some(body))?;
                 self.nbsp()?;
                 self.end()?; // need to close a box
                 self.end()?; // need to close a box
                 self.ann.nested(self, Nested::Body(body))?;
             }
             hir::ImplItemKind::Type(ref ty) => {
-                self.print_associated_type(ii.name, None, Some(ty))?;
+                self.print_associated_type(ii.ident, None, Some(ty))?;
             }
         }
         self.ann.post(self, NodeSubItem(ii.id))
@@ -1229,7 +1230,7 @@ impl<'a> State<'a> {
         let base_args = &args[1..];
         self.print_expr_maybe_paren(&args[0], parser::PREC_POSTFIX)?;
         self.s.word(".")?;
-        self.print_name(segment.name)?;
+        self.print_ident(segment.ident)?;
 
         segment.with_parameters(|parameters| {
             if !parameters.lifetimes.is_empty() ||
@@ -1346,7 +1347,7 @@ impl<'a> State<'a> {
             }
             hir::ExprWhile(ref test, ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 self.head("while")?;
@@ -1356,7 +1357,7 @@ impl<'a> State<'a> {
             }
             hir::ExprLoop(ref blk, opt_label, _) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 self.head("loop")?;
@@ -1392,7 +1393,7 @@ impl<'a> State<'a> {
             }
             hir::ExprBlock(ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 // containing cbox, will be closed by print-block at }
@@ -1434,7 +1435,7 @@ impl<'a> State<'a> {
                 self.s.word("break")?;
                 self.s.space()?;
                 if let Some(label) = destination.label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.s.space()?;
                 }
                 if let Some(ref expr) = *opt_expr {
@@ -1446,7 +1447,7 @@ impl<'a> State<'a> {
                 self.s.word("continue")?;
                 self.s.space()?;
                 if let Some(label) = destination.label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.s.space()?
                 }
             }
@@ -1581,7 +1582,7 @@ impl<'a> State<'a> {
     }
 
     pub fn print_name(&mut self, name: ast::Name) -> io::Result<()> {
-        self.print_ident(name.to_ident())
+        self.print_ident(ast::Ident::with_empty_ctxt(name))
     }
 
     pub fn print_for_decl(&mut self, loc: &hir::Local, coll: &hir::Expr) -> io::Result<()> {
@@ -1601,9 +1602,9 @@ impl<'a> State<'a> {
             if i > 0 {
                 self.s.word("::")?
             }
-            if segment.name != keywords::CrateRoot.name() &&
-               segment.name != keywords::DollarCrate.name() {
-               self.print_name(segment.name)?;
+            if segment.ident.name != keywords::CrateRoot.name() &&
+               segment.ident.name != keywords::DollarCrate.name() {
+               self.print_ident(segment.ident)?;
                segment.with_parameters(|parameters| {
                    self.print_path_parameters(parameters,
                                               segment.infer_types,
@@ -1633,9 +1634,9 @@ impl<'a> State<'a> {
                     if i > 0 {
                         self.s.word("::")?
                     }
-                    if segment.name != keywords::CrateRoot.name() &&
-                       segment.name != keywords::DollarCrate.name() {
-                        self.print_name(segment.name)?;
+                    if segment.ident.name != keywords::CrateRoot.name() &&
+                       segment.ident.name != keywords::DollarCrate.name() {
+                        self.print_ident(segment.ident)?;
                         segment.with_parameters(|parameters| {
                             self.print_path_parameters(parameters,
                                                        segment.infer_types,
@@ -1647,7 +1648,7 @@ impl<'a> State<'a> {
                 self.s.word(">")?;
                 self.s.word("::")?;
                 let item_segment = path.segments.last().unwrap();
-                self.print_name(item_segment.name)?;
+                self.print_ident(item_segment.ident)?;
                 item_segment.with_parameters(|parameters| {
                     self.print_path_parameters(parameters,
                                                item_segment.infer_types,
@@ -1659,7 +1660,7 @@ impl<'a> State<'a> {
                 self.print_type(qself)?;
                 self.s.word(">")?;
                 self.s.word("::")?;
-                self.print_name(item_segment.name)?;
+                self.print_ident(item_segment.ident)?;
                 item_segment.with_parameters(|parameters| {
                     self.print_path_parameters(parameters,
                                                item_segment.infer_types,
@@ -1715,7 +1716,7 @@ impl<'a> State<'a> {
 
             for binding in parameters.bindings.iter() {
                 start_or_comma(self)?;
-                self.print_name(binding.name)?;
+                self.print_ident(binding.ident)?;
                 self.s.space()?;
                 self.word_space("=")?;
                 self.print_type(&binding.ty)?;
@@ -1736,7 +1737,7 @@ impl<'a> State<'a> {
         // is that it doesn't matter
         match pat.node {
             PatKind::Wild => self.s.word("_")?,
-            PatKind::Binding(binding_mode, _, ref path1, ref sub) => {
+            PatKind::Binding(binding_mode, _, ident, ref sub) => {
                 match binding_mode {
                     hir::BindingAnnotation::Ref => {
                         self.word_nbsp("ref")?;
@@ -1751,7 +1752,7 @@ impl<'a> State<'a> {
                         self.word_nbsp("mut")?;
                     }
                 }
-                self.print_name(path1.node)?;
+                self.print_ident(ident)?;
                 if let Some(ref p) = *sub {
                     self.s.word("@")?;
                     self.print_pat(&p)?;
@@ -1916,7 +1917,7 @@ impl<'a> State<'a> {
         match arm.body.node {
             hir::ExprBlock(ref blk, opt_label) => {
                 if let Some(label) = opt_label {
-                    self.print_name(label.name)?;
+                    self.print_ident(label.ident)?;
                     self.word_space(":")?;
                 }
                 // the block will close the pattern's ibox
@@ -1944,7 +1945,7 @@ impl<'a> State<'a> {
                     name: Option<ast::Name>,
                     generics: &hir::Generics,
                     vis: &hir::Visibility,
-                    arg_names: &[Spanned<ast::Name>],
+                    arg_names: &[ast::Ident],
                     body_id: Option<hir::BodyId>)
                     -> io::Result<()> {
         self.print_fn_header_info(unsafety, constness, abi, vis)?;
@@ -1961,8 +1962,8 @@ impl<'a> State<'a> {
         assert!(arg_names.is_empty() || body_id.is_none());
         self.commasep(Inconsistent, &decl.inputs, |s, ty| {
             s.ibox(indent_unit)?;
-            if let Some(name) = arg_names.get(i) {
-                s.s.word(&name.node.as_str())?;
+            if let Some(arg_name) = arg_names.get(i) {
+                s.s.word(&arg_name.as_str())?;
                 s.s.word(":")?;
                 s.s.space()?;
             } else if let Some(body_id) = body_id {
@@ -2054,7 +2055,7 @@ impl<'a> State<'a> {
     }
 
     pub fn print_lifetime(&mut self, lifetime: &hir::Lifetime) -> io::Result<()> {
-        self.print_name(lifetime.name.name())
+        self.print_ident(lifetime.name.ident())
     }
 
     pub fn print_lifetime_def(&mut self, lifetime: &hir::LifetimeDef) -> io::Result<()> {
@@ -2085,7 +2086,7 @@ impl<'a> State<'a> {
     }
 
     pub fn print_ty_param(&mut self, param: &hir::TyParam) -> io::Result<()> {
-        self.print_name(param.name)?;
+        self.print_ident(param.ident)?;
         self.print_bounds(":", &param.bounds)?;
         match param.default {
             Some(ref default) => {
@@ -2187,7 +2188,7 @@ impl<'a> State<'a> {
                        decl: &hir::FnDecl,
                        name: Option<ast::Name>,
                        generic_params: &[hir::GenericParam],
-                       arg_names: &[Spanned<ast::Name>])
+                       arg_names: &[ast::Ident])
                        -> io::Result<()> {
         self.ibox(indent_unit)?;
         if !generic_params.is_empty() {

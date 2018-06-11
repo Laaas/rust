@@ -959,14 +959,14 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for GatherLocalsVisitor<'a, 'gcx, 'tcx> {
 
     // Add pattern bindings.
     fn visit_pat(&mut self, p: &'gcx hir::Pat) {
-        if let PatKind::Binding(_, _, ref path1, _) = p.node {
+        if let PatKind::Binding(_, _, ident, _) = p.node {
             let var_ty = self.assign(p.span, p.id, None);
 
             self.fcx.require_type_is_sized(var_ty, p.span,
                                            traits::VariableType(p.id));
 
             debug!("Pattern binding {} is assigned to {} with type {:?}",
-                   path1.node,
+                   ident,
                    self.fcx.ty_to_string(
                        self.fcx.locals.borrow().get(&p.id).unwrap().clone()),
                    var_ty);
@@ -1049,7 +1049,7 @@ fn check_fn<'a, 'gcx, 'tcx>(inherited: &'a Inherited<'a, 'gcx, 'tcx>,
         // The check for a non-trivial pattern is a hack to avoid duplicate warnings
         // for simple cases like `fn foo(x: Trait)`,
         // where we would error once on the parameter as a whole, and once on the binding `x`.
-        if arg.pat.simple_name().is_none() {
+        if arg.pat.simple_ident().is_none() {
             fcx.require_type_is_sized(arg_ty, decl.output.span(), traits::MiscObligation);
         }
 
@@ -1331,15 +1331,15 @@ fn report_forbidden_specialization<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         tcx.sess, impl_item.span, E0520,
         "`{}` specializes an item from a parent `impl`, but \
          that item is not marked `default`",
-        impl_item.name);
+        impl_item.ident);
     err.span_label(impl_item.span, format!("cannot specialize default item `{}`",
-                                            impl_item.name));
+                                            impl_item.ident));
 
     match tcx.span_of_impl(parent_impl) {
         Ok(span) => {
             err.span_label(span, "parent `impl` is here");
             err.note(&format!("to specialize, `{}` in the parent `impl` must be marked `default`",
-                              impl_item.name));
+                              impl_item.ident));
         }
         Err(cname) => {
             err.note(&format!("parent implementation is in crate `{}`", cname));
@@ -1363,7 +1363,7 @@ fn check_specialization_validity<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         hir::ImplItemKind::Type(_) => ty::AssociatedKind::Type
     };
 
-    let parent = ancestors.defs(tcx, trait_item.name, kind, trait_def.def_id).skip(1).next()
+    let parent = ancestors.defs(tcx, trait_item.ident, kind, trait_def.def_id).skip(1).next()
         .map(|node_item| node_item.map(|parent| parent.defaultness));
 
     if let Some(parent) = parent {
@@ -1398,11 +1398,11 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         let ty_impl_item = tcx.associated_item(tcx.hir.local_def_id(impl_item.id));
         let ty_trait_item = tcx.associated_items(impl_trait_ref.def_id)
             .find(|ac| Namespace::from(&impl_item.node) == Namespace::from(ac.kind) &&
-                         tcx.hygienic_eq(ty_impl_item.name, ac.name, impl_trait_ref.def_id))
+                       tcx.hygienic_eq(ty_impl_item.ident, ac.ident, impl_trait_ref.def_id))
             .or_else(|| {
                 // Not compatible, but needed for the error message
                 tcx.associated_items(impl_trait_ref.def_id)
-                   .find(|ac| tcx.hygienic_eq(ty_impl_item.name, ac.name, impl_trait_ref.def_id))
+                   .find(|ac| tcx.hygienic_eq(ty_impl_item.ident, ac.ident, impl_trait_ref.def_id))
             });
 
         // Check that impl definition matches trait definition
@@ -1420,7 +1420,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                          let mut err = struct_span_err!(tcx.sess, impl_item.span, E0323,
                                   "item `{}` is an associated const, \
                                   which doesn't match its trait `{}`",
-                                  ty_impl_item.name,
+                                  ty_impl_item.ident,
                                   impl_trait_ref);
                          err.span_label(impl_item.span, "does not match trait");
                          // We can only get the spans from local trait definition
@@ -1444,7 +1444,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                         let mut err = struct_span_err!(tcx.sess, impl_item.span, E0324,
                                   "item `{}` is an associated method, \
                                   which doesn't match its trait `{}`",
-                                  ty_impl_item.name,
+                                  ty_impl_item.ident,
                                   impl_trait_ref);
                          err.span_label(impl_item.span, "does not match trait");
                          if let Some(trait_span) = tcx.hir.span_if_local(ty_trait_item.def_id) {
@@ -1462,7 +1462,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                         let mut err = struct_span_err!(tcx.sess, impl_item.span, E0325,
                                   "item `{}` is an associated type, \
                                   which doesn't match its trait `{}`",
-                                  ty_impl_item.name,
+                                  ty_impl_item.ident,
                                   impl_trait_ref);
                          err.span_label(impl_item.span, "does not match trait");
                          if let Some(trait_span) = tcx.hir.span_if_local(ty_trait_item.def_id) {
@@ -1483,7 +1483,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     let associated_type_overridden = overridden_associated_type.is_some();
     for trait_item in tcx.associated_items(impl_trait_ref.def_id) {
         let is_implemented = trait_def.ancestors(tcx, impl_id)
-            .defs(tcx, trait_item.name, trait_item.kind, impl_trait_ref.def_id)
+            .defs(tcx, trait_item.ident, trait_item.kind, impl_trait_ref.def_id)
             .next()
             .map(|node_item| !node_item.node.is_from_trait())
             .unwrap_or(false);
@@ -1492,7 +1492,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
             if !trait_item.defaultness.has_value() {
                 missing_items.push(trait_item);
             } else if associated_type_overridden {
-                invalidated_items.push(trait_item.name);
+                invalidated_items.push(trait_item.ident);
             }
         }
     }
@@ -1501,17 +1501,17 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         let mut err = struct_span_err!(tcx.sess, impl_span, E0046,
             "not all trait items implemented, missing: `{}`",
             missing_items.iter()
-                  .map(|trait_item| trait_item.name.to_string())
+                  .map(|trait_item| trait_item.ident.to_string())
                   .collect::<Vec<_>>().join("`, `"));
         err.span_label(impl_span, format!("missing `{}` in implementation",
                 missing_items.iter()
-                    .map(|trait_item| trait_item.name.to_string())
+                    .map(|trait_item| trait_item.ident.to_string())
                     .collect::<Vec<_>>().join("`, `")));
         for trait_item in missing_items {
             if let Some(span) = tcx.hir.span_if_local(trait_item.def_id) {
-                err.span_label(span, format!("`{}` from trait", trait_item.name));
+                err.span_label(span, format!("`{}` from trait", trait_item.ident));
             } else {
-                err.note_trait_signature(trait_item.name.to_string(),
+                err.note_trait_signature(trait_item.ident.to_string(),
                                          trait_item.signature(&tcx));
             }
         }
@@ -1523,7 +1523,7 @@ fn check_impl_items_against_trait<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         span_err!(tcx.sess, invalidator.span, E0399,
                   "the following trait items need to be reimplemented \
                    as `{}` was overridden: `{}`",
-                  invalidator.name,
+                  invalidator.ident,
                   invalidated_items.iter()
                                    .map(|name| name.to_string())
                                    .collect::<Vec<_>>().join("`, `"))
@@ -2466,7 +2466,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         None
     }
 
-    fn resolve_place_op(&self, op: PlaceOp, is_mut: bool) -> (Option<DefId>, Symbol) {
+    fn resolve_place_op(&self, op: PlaceOp, is_mut: bool) -> (Option<DefId>, ast::Ident) {
         let (tr, name) = match (op, is_mut) {
             (PlaceOp::Deref, false) =>
                 (self.tcx.lang_items().deref_trait(), "deref"),
@@ -2477,7 +2477,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             (PlaceOp::Index, true) =>
                 (self.tcx.lang_items().index_mut_trait(), "index_mut"),
         };
-        (tr, Symbol::intern(name))
+        (tr, ast::Ident::from_str(name))
     }
 
     fn try_overloaded_place_op(&self,
@@ -3002,10 +3002,10 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                 Ok(method)
             }
             Err(error) => {
-                if segment.name != keywords::Invalid.name() {
+                if segment.ident.name != keywords::Invalid.name() {
                     self.report_method_error(span,
                                              rcvr_t,
-                                             segment.name,
+                                             segment.ident,
                                              Some(rcvr),
                                              error,
                                              Some(args));
@@ -3835,7 +3835,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                       // ... except when we try to 'break rust;'.
                       // ICE this expression in particular (see #43162).
                       if let hir::ExprPath(hir::QPath::Resolved(_, ref path)) = e.node {
-                          if path.segments.len() == 1 && path.segments[0].name == "rust" {
+                          if path.segments.len() == 1 && path.segments[0].ident.name == "rust" {
                               fatally_break_rust(self.tcx.sess);
                           }
                       }
@@ -4243,7 +4243,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             // errors with default match binding modes. See #44614.
             return (*cached_def, Some(ty), slice::from_ref(&**item_segment))
         }
-        let item_name = item_segment.name;
+        let item_name = item_segment.ident;
         let def = match self.resolve_ufcs(span, item_name, ty, node_id) {
             Ok(def) => def,
             Err(error) => {
@@ -4251,7 +4251,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                     method::MethodError::PrivateMatch(def, _) => def,
                     _ => Def::Err,
                 };
-                if item_name != keywords::Invalid.name() {
+                if item_name.name != keywords::Invalid.name() {
                     self.report_method_error(span, ty, item_name, None, error, None);
                 }
                 def
@@ -5179,10 +5179,10 @@ pub fn check_bounds_are_used<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
 
     for (&used, param) in tps_used.iter().zip(generics.ty_params()) {
         if !used {
-            struct_span_err!(tcx.sess, param.span, E0091,
+            struct_span_err!(tcx.sess, param.ident.span, E0091,
                 "type parameter `{}` is unused",
-                param.name)
-                .span_label(param.span, "unused type parameter")
+                param.ident)
+                .span_label(param.ident.span, "unused type parameter")
                 .emit();
         }
     }

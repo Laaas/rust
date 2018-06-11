@@ -332,7 +332,7 @@ pub fn program_clauses_for_associated_type_value<'a, 'tcx>(
     let mut where_clauses = vec![trait_implemented];
     where_clauses.extend(item_where_clauses);
     // `<A0 as Trait<A1..An>>::AssocType<Pn+1..Pm>`
-    let projection_ty = ty::ProjectionTy::from_ref_and_name(tcx, trait_ref, item.name);
+    let projection_ty = ty::ProjectionTy::from_ref_and_name(tcx, trait_ref, item.ident);
     // `Normalize(<A0 as Trait<A1..An>>::AssocType<Pn+1..Pm> -> T)`
     let normalize_goal = DomainGoal::Normalize(ty::ProjectionPredicate { projection_ty, ty });
     // `Normalize(... -> T) :- ...`

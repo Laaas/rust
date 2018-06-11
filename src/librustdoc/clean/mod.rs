@@ -1146,7 +1146,7 @@ fn resolve(cx: &DocContext, path_str: &str, is_val: bool) -> Result<(Def, Option
             Def::Struct(did) | Def::Union(did) | Def::Enum(did) | Def::TyAlias(did) => {
                 let item = cx.tcx.inherent_impls(did).iter()
                                  .flat_map(|imp| cx.tcx.associated_items(*imp))
-                                 .find(|item| item.name == item_name);
+                                 .find(|item| item.ident.name == item_name);
                 if let Some(item) = item {
                     let out = match item.kind {
                         ty::AssociatedKind::Method if is_val => "method",
@@ -1181,7 +1181,7 @@ fn resolve(cx: &DocContext, path_str: &str, is_val: bool) -> Result<(Def, Option
             Def::Trait(did) => {
                 let item = cx.tcx.associated_item_def_ids(did).iter()
                              .map(|item| cx.tcx.associated_item(*item))
-                             .find(|item| item.name == item_name);
+                             .find(|item| item.ident.name == item_name);
                 if let Some(item) = item {
                     let kind = match item.kind {
                         ty::AssociatedKind::Const if is_val => "associatedconstant",
@@ -1457,7 +1457,7 @@ pub struct TyParam {
 impl Clean<TyParam> for hir::TyParam {
     fn clean(&self, cx: &DocContext) -> TyParam {
         TyParam {
-            name: self.name.clean(cx),
+            name: self.ident.name.clean(cx),
             did: cx.tcx.hir.local_def_id(self.id),
             bounds: self.bounds.clean(cx),
             default: self.default.clean(cx),
@@ -1691,22 +1691,20 @@ impl Clean<Lifetime> for hir::Lifetime {
                 _ => {}
             }
         }
-        Lifetime(self.name.name().to_string())
+        Lifetime(self.name.ident().to_string())
     }
 }
 
 impl Clean<Lifetime> for hir::LifetimeDef {
     fn clean(&self, _: &DocContext) -> Lifetime {
         if self.bounds.len() > 0 {
-            let mut s = format!("{}: {}",
-                                self.lifetime.name.name(),
-                                self.bounds[0].name.name());
+            let mut s = format!("{}: {}", self.lifetime, self.bounds[0]);
             for bound in self.bounds.iter().skip(1) {
-                s.push_str(&format!(" + {}", bound.name.name()));
+                s.push_str(&format!(" + {}", bound));
             }
             Lifetime(s)
         } else {
-            Lifetime(self.lifetime.name.name().to_string())
+            Lifetime(self.lifetime.to_string())
         }
     }
 }
@@ -1844,7 +1842,7 @@ impl<'tcx> Clean<Type> for ty::ProjectionTy<'tcx> {
             }
         };
         Type::QPath {
-            name: cx.tcx.associated_item(self.item_def_id).name.clean(cx),
+            name: cx.tcx.associated_item(self.item_def_id).ident.name.clean(cx),
             self_type: box self.self_ty().clean(cx),
             trait_: box trait_
         }
@@ -2116,11 +2114,11 @@ pub struct Arguments {
     pub values: Vec<Argument>,
 }
 
-impl<'a> Clean<Arguments> for (&'a [P<hir::Ty>], &'a [Spanned<ast::Name>]) {
+impl<'a> Clean<Arguments> for (&'a [P<hir::Ty>], &'a [ast::Ident]) {
     fn clean(&self, cx: &DocContext) -> Arguments {
         Arguments {
             values: self.0.iter().enumerate().map(|(i, ty)| {
-                let mut name = self.1.get(i).map(|n| n.node.to_string())
+                let mut name = self.1.get(i).map(|ident| ident.to_string())
                                             .unwrap_or(String::new());
                 if name.is_empty() {
                     name = "_".to_string();
@@ -2327,7 +2325,7 @@ impl Clean<Item> for hir::TraitItem {
             }
         };
         Item {
-            name: Some(self.name.clean(cx)),
+            name: Some(self.ident.name.clean(cx)),
             attrs: self.attrs.clean(cx),
             source: self.span.clean(cx),
             def_id: cx.tcx.hir.local_def_id(self.id),
@@ -2355,7 +2353,7 @@ impl Clean<Item> for hir::ImplItem {
             }, true),
         };
         Item {
-            name: Some(self.name.clean(cx)),
+            name: Some(self.ident.name.clean(cx)),
             source: self.span.clean(cx),
             attrs: self.attrs.clean(cx),
             def_id: cx.tcx.hir.local_def_id(self.id),
@@ -2434,7 +2432,7 @@ impl<'tcx> Clean<Item> for ty::AssociatedItem {
                 }
             }
             ty::AssociatedKind::Type => {
-                let my_name = self.name.clean(cx);
+                let my_name = self.ident.name.clean(cx);
 
                 if let ty::TraitContainer(did) = self.container {
                     // When loading a cross-crate associated type, the bounds for this type
@@ -2497,7 +2495,7 @@ impl<'tcx> Clean<Item> for ty::AssociatedItem {
         };
 
         Item {
-            name: Some(self.name.clean(cx)),
+            name: Some(self.ident.name.clean(cx)),
             visibility,
             stability: get_stability(cx, self.def_id),
             deprecation: get_deprecation(cx, self.def_id),
@@ -2885,7 +2883,7 @@ impl Clean<Type> for hir::Ty {
                     segments: segments.into(),
                 };
                 Type::QPath {
-                    name: p.segments.last().unwrap().name.clean(cx),
+                    name: p.segments.last().unwrap().ident.name.clean(cx),
                     self_type: box qself.clean(cx),
                     trait_: box resolve_type(cx, trait_path.clean(cx), self.id)
                 }
@@ -2902,7 +2900,7 @@ impl Clean<Type> for hir::Ty {
                     segments: vec![].into(),
                 };
                 Type::QPath {
-                    name: segment.name.clean(cx),
+                    name: segment.ident.name.clean(cx),
                     self_type: box qself.clean(cx),
                     trait_: box resolve_type(cx, trait_path.clean(cx), self.id)
                 }
@@ -3032,7 +3030,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
                     let mut bindings = vec![];
                     for pb in obj.projection_bounds() {
                         bindings.push(TypeBinding {
-                            name: cx.tcx.associated_item(pb.item_def_id()).name.clean(cx),
+                            name: cx.tcx.associated_item(pb.item_def_id()).ident.name.clean(cx),
                             ty: pb.skip_binder().ty.clean(cx)
                         });
                     }
@@ -3088,7 +3086,7 @@ impl<'tcx> Clean<Type> for Ty<'tcx> {
                             if proj.projection_ty.trait_ref(cx.tcx) == *trait_ref.skip_binder() {
                                 Some(TypeBinding {
                                     name: cx.tcx.associated_item(proj.projection_ty.item_def_id)
-                                                .name.clean(cx),
+                                                .ident.name.clean(cx),
                                     ty: proj.ty.clean(cx),
                                 })
                             } else {
@@ -3496,7 +3494,7 @@ pub struct PathSegment {
 impl Clean<PathSegment> for hir::PathSegment {
     fn clean(&self, cx: &DocContext) -> PathSegment {
         PathSegment {
-            name: self.name.clean(cx),
+            name: self.ident.name.clean(cx),
             params: self.with_parameters(|parameters| parameters.clean(cx))
         }
     }
@@ -3549,7 +3547,7 @@ fn strip_path(path: &Path) -> Path {
 fn qpath_to_string(p: &hir::QPath) -> String {
     let segments = match *p {
         hir::QPath::Resolved(_, ref path) => &path.segments,
-        hir::QPath::TypeRelative(_, ref segment) => return segment.name.to_string(),
+        hir::QPath::TypeRelative(_, ref segment) => return segment.ident.to_string(),
     };
 
     let mut s = String::new();
@@ -3557,8 +3555,8 @@ fn qpath_to_string(p: &hir::QPath) -> String {
         if i > 0 {
             s.push_str("::");
         }
-        if seg.name != keywords::CrateRoot.name() {
-            s.push_str(&*seg.name.as_str());
+        if seg.ident.name != keywords::CrateRoot.name() {
+            s.push_str(&*seg.ident.as_str());
         }
     }
     s
@@ -3744,7 +3742,7 @@ impl Clean<Vec<Item>> for doctree::Impl {
         let provided = trait_.def_id().map(|did| {
             cx.tcx.provided_trait_methods(did)
                   .into_iter()
-                  .map(|meth| meth.name.to_string())
+                  .map(|meth| meth.ident.to_string())
                   .collect()
         }).unwrap_or(FxHashSet());
 
@@ -3975,7 +3973,7 @@ fn name_from_pat(p: &hir::Pat) -> String {
 
     match p.node {
         PatKind::Wild => "_".to_string(),
-        PatKind::Binding(_, _, ref p, _) => p.node.to_string(),
+        PatKind::Binding(_, _, ident, _) => ident.to_string(),
         PatKind::TupleStruct(ref p, ..) | PatKind::Path(ref p) => qpath_to_string(p),
         PatKind::Struct(ref name, ref fields, etc) => {
             format!("{} {{ {}{} }}", qpath_to_string(name),
@@ -4204,7 +4202,7 @@ pub struct TypeBinding {
 impl Clean<TypeBinding> for hir::TypeBinding {
     fn clean(&self, cx: &DocContext) -> TypeBinding {
         TypeBinding {
-            name: self.name.clean(cx),
+            name: self.ident.name.clean(cx),
             ty: self.ty.clean(cx)
         }
     }
@@ -4338,7 +4336,7 @@ where F: Fn(DefId) -> Def {
         span: DUMMY_SP,
         def: def_ctor(def_id),
         segments: hir::HirVec::from_vec(apb.names.iter().map(|s| hir::PathSegment {
-            name: ast::Name::intern(&s),
+            ident: ast::Ident::from_str(&s),
             parameters: None,
             infer_types: false,
         }).collect())

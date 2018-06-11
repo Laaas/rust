@@ -178,13 +178,12 @@ pub const DUMMY_ITEM_LOCAL_ID: ItemLocalId = ItemLocalId(!0);
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
 pub struct Label {
-    pub name: Name,
-    pub span: Span,
+    pub ident: Ident,
 }
 
 impl fmt::Debug for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "label({:?})", self.name)
+        write!(f, "label({:?})", self.ident)
     }
 }
 
@@ -229,18 +228,31 @@ pub enum LifetimeName {
     Static,
 
     /// Some user-given name like `'x`
-    Name(Name),
+    Ident(Ident),
 }
 
 impl LifetimeName {
-    pub fn name(&self) -> Name {
-        use self::LifetimeName::*;
+    pub fn ident(&self) -> Ident {
         match *self {
-            Implicit => keywords::Invalid.name(),
-            Fresh(_) | Underscore => keywords::UnderscoreLifetime.name(),
-            Static => keywords::StaticLifetime.name(),
-            Name(name) => name,
+            LifetimeName::Implicit => keywords::Invalid.ident(),
+            LifetimeName::Fresh(_) | LifetimeName::Underscore =>
+                keywords::UnderscoreLifetime.ident(),
+            LifetimeName::Static => keywords::StaticLifetime.ident(),
+            LifetimeName::Ident(ident) => ident,
         }
+    }
+
+    pub fn modern(&self) -> LifetimeName {
+        match *self {
+            LifetimeName::Ident(ident) => LifetimeName::Ident(ident.modern()),
+            lifetime_name => lifetime_name,
+        }
+    }
+}
+
+impl fmt::Display for Lifetime {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.name.ident().fmt(f)
     }
 }
 
@@ -255,16 +267,15 @@ impl fmt::Debug for Lifetime {
 
 impl Lifetime {
     pub fn is_elided(&self) -> bool {
-        use self::LifetimeName::*;
         match self.name {
-            Implicit | Underscore => true,
+            LifetimeName::Implicit | LifetimeName::Underscore => true,
 
             // It might seem surprising that `Fresh(_)` counts as
             // *not* elided -- but this is because, as far as the code
             // in the compiler is concerned -- `Fresh(_)` variants act
             // equivalently to "some fresh name". They correspond to
             // early-bound regions on an impl, in other words.
-            Fresh(_) | Static | Name(_) => false,
+            LifetimeName::Fresh(_) | LifetimeName::Static | LifetimeName::Ident(_) => false,
         }
     }
 
@@ -299,7 +310,7 @@ pub struct Path {
 
 impl Path {
     pub fn is_global(&self) -> bool {
-        !self.segments.is_empty() && self.segments[0].name == keywords::CrateRoot.name()
+        !self.segments.is_empty() && self.segments[0].ident.name == keywords::CrateRoot.name()
     }
 }
 
@@ -320,7 +331,7 @@ impl fmt::Display for Path {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct PathSegment {
     /// The identifier portion of this path segment.
-    pub name: Name,
+    pub ident: Ident,
 
     /// Type/lifetime parameters attached to this path. They come in
     /// two flavors: `Path<A,B,C>` and `Path(A,B) -> C`. Note that
@@ -338,17 +349,17 @@ pub struct PathSegment {
 
 impl PathSegment {
     /// Convert an identifier to the corresponding segment.
-    pub fn from_name(name: Name) -> PathSegment {
+    pub fn from_ident(ident: Ident) -> PathSegment {
         PathSegment {
-            name,
+            ident,
             infer_types: true,
             parameters: None
         }
     }
 
-    pub fn new(name: Name, parameters: PathParameters, infer_types: bool) -> Self {
+    pub fn new(ident: Ident, parameters: PathParameters, infer_types: bool) -> Self {
         PathSegment {
-            name,
+            ident,
             infer_types,
             parameters: if parameters.is_empty() {
                 None
@@ -445,11 +456,10 @@ pub type TyParamBounds = HirVec<TyParamBound>;
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct TyParam {
-    pub name: Name,
+    pub ident: Ident,
     pub id: NodeId,
     pub bounds: TyParamBounds,
     pub default: Option<P<Ty>>,
-    pub span: Span,
     pub pure_wrt_drop: bool,
     pub synthetic: Option<SyntheticTyParamKind>,
     pub attrs: HirVec<Attribute>,
@@ -911,7 +921,7 @@ pub enum PatKind {
     /// The `NodeId` is the canonical ID for the variable being bound,
     /// e.g. in `Ok(x) | Err(x)`, both `x` use the same canonical ID,
     /// which is the pattern ID of the first `x`.
-    Binding(BindingAnnotation, NodeId, Spanned<Name>, Option<P<Pat>>),
+    Binding(BindingAnnotation, NodeId, Ident, Option<P<Pat>>),
 
     /// A struct or struct variant pattern, e.g. `Variant {x, y, ..}`.
     /// The `bool` is `true` in the presence of a `..`.
@@ -1579,7 +1589,7 @@ pub struct TraitItemId {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct TraitItem {
     pub id: NodeId,
-    pub name: Name,
+    pub ident: Ident,
     pub hir_id: HirId,
     pub attrs: HirVec<Attribute>,
     pub generics: Generics,
@@ -1591,7 +1601,7 @@ pub struct TraitItem {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub enum TraitMethod {
     /// No default body in the trait, just a signature.
-    Required(HirVec<Spanned<Name>>),
+    Required(HirVec<Ident>),
 
     /// Both signature and body are provided in the trait.
     Provided(BodyId),
@@ -1622,7 +1632,7 @@ pub struct ImplItemId {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct ImplItem {
     pub id: NodeId,
-    pub name: Name,
+    pub ident: Ident,
     pub hir_id: HirId,
     pub vis: Visibility,
     pub defaultness: Defaultness,
@@ -1648,7 +1658,7 @@ pub enum ImplItemKind {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct TypeBinding {
     pub id: NodeId,
-    pub name: Name,
+    pub ident: Ident,
     pub ty: P<Ty>,
     pub span: Span,
 }
@@ -1686,7 +1696,7 @@ pub struct BareFnTy {
     pub abi: Abi,
     pub generic_params: HirVec<GenericParam>,
     pub decl: P<FnDecl>,
-    pub arg_names: HirVec<Spanned<Name>>,
+    pub arg_names: HirVec<Ident>,
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
@@ -2165,7 +2175,7 @@ impl Item_ {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct TraitItemRef {
     pub id: TraitItemId,
-    pub name: Name,
+    pub ident: Ident,
     pub kind: AssociatedItemKind,
     pub span: Span,
     pub defaultness: Defaultness,
@@ -2180,7 +2190,7 @@ pub struct TraitItemRef {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub struct ImplItemRef {
     pub id: ImplItemId,
-    pub name: Name,
+    pub ident: Ident,
     pub kind: AssociatedItemKind,
     pub span: Span,
     pub vis: Visibility,
@@ -2208,7 +2218,7 @@ pub struct ForeignItem {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
 pub enum ForeignItem_ {
     /// A foreign function
-    ForeignItemFn(P<FnDecl>, HirVec<Spanned<Name>>, Generics),
+    ForeignItemFn(P<FnDecl>, HirVec<Ident>, Generics),
     /// A foreign static item (`static ext: u8`), with optional mutability
     /// (the boolean is true when mutable)
     ForeignItemStatic(P<Ty>, bool),
